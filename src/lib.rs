@@ -381,17 +381,7 @@ pub mod common {
 
     impl<S: Index> Ord for Slice<S> where S::Ref: Ord + Eq {
         fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-            use std::cmp::Ordering;
-            let len = std::cmp::min(self.len(), other.len());
-
-            for i in 0 .. len {
-                match self.get(i).cmp(&other.get(i)) {
-                    Ordering::Equal => (),
-                    not_equal => return not_equal,
-                }
-            }
-
-            self.len().cmp(&other.len())
+            self.partial_cmp(other).unwrap()
         }
     }
 
