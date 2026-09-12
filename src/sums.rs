@@ -857,8 +857,8 @@ pub mod result {
     }
 
     // NB: You are not allowed to change the variant, but can change its contents.
-    impl<SC: IndexMut, TC: IndexMut, CC: IndexAs<u64> + Len, VC: IndexAs<u64> + Len> IndexMut for Results<SC, TC, CC, VC> {
-        type IndexMut<'a> = Result<SC::IndexMut<'a>, TC::IndexMut<'a>> where SC: 'a, TC: 'a, CC: 'a, VC: 'a;
+    impl<SC: IndexMut, TC: IndexMut, CC: IndexAs<u64> + Len, VC: IndexAs<u64> + Len, WC: IndexAs<u64>> IndexMut for Results<SC, TC, CC, VC, WC> {
+        type IndexMut<'a> = Result<SC::IndexMut<'a>, TC::IndexMut<'a>> where Self: 'a;
         #[inline(always)]
         fn get_mut(&mut self, index: usize) -> Self::IndexMut<'_> {
             if self.indexes.get(index) {
@@ -1107,8 +1107,8 @@ pub mod option {
             }
         }
     }
-    impl<TC: IndexMut, CC: IndexAs<u64> + Len, VC: IndexAs<u64> + Len> IndexMut for Options<TC, CC, VC> {
-        type IndexMut<'a> = Option<TC::IndexMut<'a>> where TC: 'a, CC: 'a, VC: 'a;
+    impl<TC: IndexMut, CC: IndexAs<u64> + Len, VC: IndexAs<u64> + Len, WC: IndexAs<u64>> IndexMut for Options<TC, CC, VC, WC> {
+        type IndexMut<'a> = Option<TC::IndexMut<'a>> where Self: 'a;
         #[inline(always)]
         fn get_mut(&mut self, index: usize) -> Self::IndexMut<'_> {
             if self.indexes.get(index) {

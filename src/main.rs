@@ -281,6 +281,160 @@ mod test {
         assert!(matches!(dest_tags.borrow().get(2), Test4::Foo));
     }
 
+    #[test]
+    fn index_mut_derived_struct() {
+        use columnar::{Index, IndexMut, Len};
+
+        let mut columns = columnar::Columnar::as_columns([
+            Test1 { foo: vec![1u8, 2, 3], bar: 4i16 },
+            Test1 { foo: vec![5u8, 6, 7], bar: 8i16 },
+        ].iter());
+        assert_eq!(columns.len(), 2);
+
+        *columns.get_mut(1).bar = 9;
+        let mut foo = columns.get_mut(0).foo;
+        *foo.get_mut(2) = 30;
+
+        assert_eq!(*(&columns).get(1).bar, 9);
+        assert_eq!((&columns).get(0).foo.into_iter().copied().collect::<Vec<_>>(), vec![1, 2, 30]);
+
+        // `last_mut` comes from the same trait, and should address the final element.
+        *columns.last_mut().unwrap().bar = 11;
+        assert_eq!(*(&columns).get(1).bar, 11);
+    }
+
+    #[test]
+    fn index_mut_derived_tuple_struct() {
+        use columnar::{Index, IndexMut};
+
+        let mut columns = columnar::Columnar::as_columns([
+            Test2(vec![1u8, 2], 3i16),
+        ].iter());
+
+        *columns.get_mut(0).f1 = 4;
+        assert_eq!(*(&columns).get(0).f1, 4);
+    }
+
+    #[test]
+    fn index_mut_derived_unit_struct() {
+        use columnar::IndexMut;
+
+        let mut columns = columnar::Columnar::as_columns([Test5, Test5].iter());
+        assert!(matches!(columns.get_mut(1), Test5));
+    }
+
+    #[test]
+    fn index_mut_derived_enum() {
+        use columnar::{Index, IndexMut, Push};
+
+        let mut columns = <Test3<u8> as Columnar>::Container::default();
+        columns.push(Test3::<u8>::Foo(vec![1, 2], 10));
+        columns.push(Test3::<u8>::Bar(20));
+        columns.push(Test3::<u8>::Void);
+
+        // Contents of a variant are mutable, though the variant itself is not.
+        match columns.get_mut(0) {
+            Test3Reference::Foo((mut values, byte)) => {
+                *byte = 11;
+                *values.get_mut(1) = 3;
+            },
+            other => panic!("Expected Foo, got {:?}", other),
+        }
+        match columns.get_mut(1) {
+            Test3Reference::Bar(x) => *x = 21,
+            other => panic!("Expected Bar, got {:?}", other),
+        }
+        match columns.get_mut(2) {
+            Test3Reference::Void(()) => {},
+            other => panic!("Expected Void, got {:?}", other),
+        }
+
+        match (&columns).get(0) {
+            Test3Reference::Foo((values, byte)) => {
+                assert_eq!(values.into_iter().copied().collect::<Vec<_>>(), vec![1, 3]);
+                assert_eq!(*byte, 11);
+            },
+            other => panic!("Expected Foo, got {:?}", other),
+        }
+        match (&columns).get(1) {
+            Test3Reference::Bar(x) => assert_eq!(*x, 21),
+            other => panic!("Expected Bar, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn index_mut_derived_enum_named_fields() {
+        use columnar::{Index, IndexMut, Push};
+
+        let mut columns = <Test7 as Columnar>::Container::default();
+        columns.push(Test7::Click { x: 10, y: 20 });
+        columns.push(Test7::Scroll(-5));
+
+        match columns.get_mut(0) {
+            Test7Reference::Click((x, y)) => { *x = 30; *y = 40; },
+            other => panic!("Expected Click, got {:?}", other),
+        }
+
+        match (&columns).get(0) {
+            Test7Reference::Click((x, y)) => { assert_eq!(x, 30); assert_eq!(y, 40); },
+            other => panic!("Expected Click, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn index_mut_core_containers() {
+        use columnar::{Index, IndexMut, Push};
+
+        // Arrays, matching the `Index` implementation for `[T; N]`.
+        let mut array = [1u8, 2, 3];
+        *array.get_mut(1) = 4;
+        assert_eq!(array, [1, 4, 3]);
+
+        // Strings hand out bytes, and the bounds are left alone.
+        let mut strings = <String as Columnar>::Container::default();
+        strings.push("abc");
+        strings.push("def");
+        strings.get_mut(1)[0] = b'D';
+        assert_eq!((&strings).get(1), b"Def");
+
+        // `Usizes` and `Isizes` are generic in their value container.
+        let mut usizes = <usize as Columnar>::Container::default();
+        usizes.push(7usize);
+        *usizes.get_mut(0) = 8;
+        assert_eq!((&usizes).get(0), 8);
+
+        let mut isizes = <isize as Columnar>::Container::default();
+        isizes.push(-7isize);
+        *isizes.get_mut(0) = -8;
+        assert_eq!((&isizes).get(0), -8);
+
+        // `Options` and `Results` allow mutation of contents, but not of the variant.
+        let mut options = <Option<i16> as Columnar>::Container::default();
+        options.push(Some(1i16));
+        options.push(None::<i16>);
+        *options.get_mut(0).unwrap() = 2;
+        assert!(options.get_mut(1).is_none());
+        assert_eq!((&options).get(0), Some(2));
+
+        let mut results = <Result<i16, u8> as Columnar>::Container::default();
+        results.push(Ok::<i16, u8>(1));
+        results.push(Err::<i16, u8>(2));
+        *results.get_mut(0).unwrap() = 3;
+        *results.get_mut(1).unwrap_err() = 4;
+        assert_eq!((&results).get(0), Ok(3));
+        assert_eq!((&results).get(1), Err(4));
+    }
+
+    #[test]
+    fn index_mut_non_default_rank_select_words() {
+        use columnar::{IndexMut, Options, Results};
+
+        // The implementations must not be restricted to the default `WC` parameter.
+        fn is_index_mut<T: IndexMut>() {}
+        is_index_mut::<Options<Vec<i16>, Vec<u64>, Vec<u64>, Vec<u64>>>();
+        is_index_mut::<Results<Vec<i16>, Vec<u8>, Vec<u64>, Vec<u64>, Vec<u64>>>();
+    }
+
     // Test names that collide with the prelude.
     #[derive(Columnar, Debug, Copy, Clone)]
     enum Strange { None, Some }

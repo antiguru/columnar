@@ -1,5 +1,5 @@
 use alloc::{vec::Vec, string::String, string::ToString, boxed::Box};
-use super::{Clear, Columnar, Container, Len, Index, IndexAs, Push, Borrow};
+use super::{Clear, Columnar, Container, Len, Index, IndexAs, IndexMut, Push, Borrow};
 
 /// A stand-in for `Vec<String>`.
 ///
@@ -166,6 +166,22 @@ impl<'a, BC: Len+IndexAs<u64>> Index for &'a Strings<BC, Vec<u8>> {
         let lower: usize = lower.try_into().expect("bounds must fit in `usize`");
         let upper: usize = upper.try_into().expect("bounds must fit in `usize`");
         &self.values[lower .. upper]
+    }
+}
+
+/// Mutable access is by bytes, matching the shared reference type `&[u8]`.
+///
+/// Writes through this reference can leave the container holding bytes that are
+/// not valid utf8, which `Columnar::copy_from` and `Columnar::into_owned` reject.
+/// The bounds are untouched, so the length of each element is preserved.
+impl<BC: Len+IndexAs<u64>> IndexMut for Strings<BC, Vec<u8>> {
+    type IndexMut<'a> = &'a mut [u8] where Self: 'a;
+    #[inline(always)] fn get_mut(&mut self, index: usize) -> Self::IndexMut<'_> {
+        let lower = if index == 0 { 0 } else { self.bounds.index_as(index - 1) };
+        let upper = self.bounds.index_as(index);
+        let lower: usize = lower.try_into().expect("bounds must fit in `usize`");
+        let upper: usize = upper.try_into().expect("bounds must fit in `usize`");
+        &mut self.values[lower .. upper]
     }
 }
 

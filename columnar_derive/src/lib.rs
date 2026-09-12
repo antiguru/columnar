@@ -258,6 +258,24 @@ fn derive_struct(name: &syn::Ident, generics: &syn::Generics, data_struct: syn::
         }
     };
 
+    let index_mut = {
+        let impl_gen = quote! { < #(#container_types),* > };
+        let ty_gen = quote! { < #(#container_types),* > };
+        let where_clause = quote! { where #(#container_types: ::columnar::IndexMut),* };
+
+        let index_type = quote! { #r_ident < #(<#container_types as ::columnar::IndexMut>::IndexMut<'a>,)* > };
+
+        quote! {
+            impl #impl_gen ::columnar::IndexMut for #c_ident #ty_gen #where_clause {
+                type IndexMut<'a> = #index_type where Self: 'a;
+                #[inline(always)]
+                fn get_mut(&mut self, index: usize) -> Self::IndexMut<'_> {
+                    #r_ident { #(#names: self.#names.get_mut(index),)* }
+                }
+            }
+        }
+    };
+
     let clear = {
 
         let impl_gen = quote! { < #(#container_types),* > };
@@ -427,6 +445,7 @@ fn derive_struct(name: &syn::Ident, generics: &syn::Generics, data_struct: syn::
 
         #index_own
         #index_ref
+        #index_mut
         #length
         #clear
 
@@ -488,6 +507,17 @@ fn derive_unit_struct(name: &syn::Ident, _generics: &syn::Generics, vis: syn::Vi
             type Ref = #name;
             #[inline(always)]
             fn get(&self, index: usize) -> Self::Ref {
+                #name
+            }
+        }
+
+        // A unit struct has no state, so a mutable reference to one carries no
+        // information beyond the value itself. The implementation exists so that
+        // containers with unit struct fields can themselves implement `IndexMut`.
+        impl<CW> ::columnar::IndexMut for #c_ident<CW> {
+            type IndexMut<'a> = #name where Self: 'a;
+            #[inline(always)]
+            fn get_mut(&mut self, _index: usize) -> Self::IndexMut<'_> {
                 #name
             }
         }
@@ -859,6 +889,32 @@ fn derive_enum(name: &syn::Ident, generics: &syn:: Generics, data_enum: syn::Dat
         }
     };
 
+    // NB: You are not allowed to change the variant, but can change its contents.
+    let index_mut = {
+        let impl_gen = quote! { < #(#container_types,)* CVar, COff> };
+        let ty_gen = quote! { < #(#container_types,)* CVar, COff> };
+        let where_clause = quote! { where #(#container_types: ::columnar::IndexMut,)* CVar: ::columnar::Len + ::columnar::IndexAs<u8>, COff: ::columnar::Len + ::columnar::IndexAs<u64>  };
+
+        let index_type = quote! { #r_ident < #(<#container_types as ::columnar::IndexMut>::IndexMut<'a>,)* > };
+
+        // These numbers must match those in the `Push` implementations.
+        let numbers = (0 .. variants.len());
+
+        quote! {
+            impl #impl_gen ::columnar::IndexMut for #c_ident #ty_gen #where_clause {
+                type IndexMut<'a> = #index_type where Self: 'a;
+                #[inline(always)]
+                fn get_mut(&mut self, index: usize) -> Self::IndexMut<'_> {
+                    let (variant, offset) = self.indexes.get(index);
+                    match variant as usize {
+                        #( #numbers => #r_ident::#names(self.#names.get_mut(offset as usize)), )*
+                        x => panic!("Unacceptable discriminant found: {:?}", x),
+                    }
+                }
+            }
+        }
+    };
+
     let clear = {
 
         let impl_gen = quote! { < #(#container_types),* > };
@@ -1169,6 +1225,7 @@ fn derive_enum(name: &syn::Ident, generics: &syn:: Generics, data_enum: syn::Dat
 
         #index_own
         #index_ref
+        #index_mut
         #length
         #clear
 

@@ -292,6 +292,10 @@ pub mod common {
             type IndexMut<'a> = &'a mut T where Self: 'a;
             #[inline(always)] fn get_mut(&mut self, index: usize) -> Self::IndexMut<'_> { &mut self[index] }
         }
+        impl<T, const N: usize> IndexMut for [T; N] {
+            type IndexMut<'a> = &'a mut T where Self: 'a;
+            #[inline(always)] fn get_mut(&mut self, index: usize) -> Self::IndexMut<'_> { &mut self[index] }
+        }
 
         /// A type that can be accessed by `usize` but without borrowing `self`.
         ///

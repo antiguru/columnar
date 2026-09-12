@@ -124,9 +124,9 @@ mod sizes {
     }
 
     impl<CV: Len> Len for Usizes<CV> { fn len(&self) -> usize { self.values.len() }}
-    impl IndexMut for Usizes {
-        type IndexMut<'a> = &'a mut u64;
-        #[inline(always)] fn get_mut(&mut self, index: usize) -> Self::IndexMut<'_> { &mut self.values[index] }
+    impl<CV: IndexMut> IndexMut for Usizes<CV> {
+        type IndexMut<'a> = CV::IndexMut<'a> where CV: 'a;
+        #[inline(always)] fn get_mut(&mut self, index: usize) -> Self::IndexMut<'_> { self.values.get_mut(index) }
     }
     impl<CV: IndexAs<u64>> Index for Usizes<CV> {
         type Ref = usize;
@@ -205,9 +205,9 @@ mod sizes {
     }
 
     impl<CV: Len> Len for Isizes<CV> { fn len(&self) -> usize { self.values.len() }}
-    impl IndexMut for Isizes {
-        type IndexMut<'a> = &'a mut i64;
-        #[inline(always)] fn get_mut(&mut self, index: usize) -> Self::IndexMut<'_> { &mut self.values[index] }
+    impl<CV: IndexMut> IndexMut for Isizes<CV> {
+        type IndexMut<'a> = CV::IndexMut<'a> where CV: 'a;
+        #[inline(always)] fn get_mut(&mut self, index: usize) -> Self::IndexMut<'_> { self.values.get_mut(index) }
     }
     impl<CV: IndexAs<i64>> Index for Isizes<CV> {
         type Ref = isize;
